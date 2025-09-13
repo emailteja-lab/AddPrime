@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Prime-Sum 2048</title>
+<style>
+:root{
+  --bg:#f4efe9;
+  --board:#bdb6aa;
+  --cell:#e9e3da;
+  --prime:#ffa500;
+  --text:#222;
+  font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+}
+body{background:var(--bg);color:var(--text);display:flex;align-items:center;justify-content:center;height:100vh;margin:0; flex-direction: column;}
+.wrapper{width:min(720px,95vw)}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+h1{font-size:20px;margin:0}
+.score{background:#fff;padding:8px 12px;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,0.08)}
+.board{background:var(--board);padding:14px;border-radius:12px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.cell{width:100%;padding-top:100%;position:relative;border-radius:8px;background:var(--cell);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;color:#333}
+.tile{position:absolute;inset:0;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;transition:transform 150ms ease, background 200ms;box-shadow:0 6px 12px rgba(0,0,0,0.12)}
+.small{font-size:13px}
+.prime{background:var(--prime);color:#fff;}
+.normal{background:#ffffff}
+.controls{display:flex;gap:8px;margin-top:12px}
+button{padding:8px 12px;border-radius:8px;border:0;background:#333;color:#fff;cursor:pointer}
+.mobile-instructions{display:none}
+#overlay { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.3); display: none; }
+#sidePanel { position: fixed; top:0; right: -400px; width: 350px; height:100%; background: #fff; box-shadow: -2px 0 8px rgba(0,0,0,0.3); transition: right 0.3s ease; padding: 20px; text-align: left; overflow-y:auto; }
+#sidePanel.active { right: 0; }
+#overlay.active { display: block; }
+#sidePanel h2 { margin-top:0; }
+#playAgain { margin-top: 20px; background: #007bff; color: #fff; border: none; padding: 10px 16px; font-size: 16px; border-radius: 6px; cursor: pointer; }
+#playAgain:hover { background: #0056b3; }
+@media (max-width:520px){
+  h1{font-size:16px}
+  .tile{font-size:16px}
+  .mobile-instructions{display:block;color:#666;margin-top:8px;font-size:13px}
+}
+</style>
+</head>
+<body>
+<div class="wrapper">
+<header>
+  <h1> ADD Numbers, Primes with Self </h1>
+  <div style="display:flex;gap:12px;align-items:center">
+    <div class="score">Score: <span id="score">0</span></div>
+    <button onclick="newGame()">New Game</button>
+  </div>
+</header>
+<div id="board" class="board"></div>
+<div class="controls">
+  <button id="hintBtn">Show Rules</button>
+</div>
+<div class="hint mobile-instructions">Swipe or use arrow keys to move tiles. When two tiles collide they add (sum). Prime tiles can only merge with the same prime number.</div>
+</div>
+
+<div id="overlay" onclick="closePanel()"></div>
+<div id="sidePanel">
+<h2>Game Over</h2>
+<p id="finalScore"></p>
+<button id="playAgain" onclick="newGame()">Play Again</button>
+</div>
+
+<script>
+const boardEl=document.getElementById('board');
+const scoreEl=document.getElementById('score');
+const overlay=document.getElementById('overlay');
+const sidePanel=document.getElementById('sidePanel');
+const finalScoreEl=document.getElementById('finalScore');
+const hintBtn=document.getElementById('hintBtn');
+let SIZE=4, START_TILES=8, MIN_INIT=5, MAX_INIT=9;
+let grid=[], score=0, gameOver=false, previousStates=[];
+
+function isPrime(n){if(n<2)return false; for(let i=2;i*i<=n;i++) if(n%i===0) return false; return true;}
+function idx(r,c){return r*SIZE+c;}
+function setupDOM(){boardEl.innerHTML=''; for(let i=0;i<SIZE*SIZE;i++){const cell=document.createElement('div');cell.className='cell';boardEl.appendChild(cell);}}
+function draw(){const cells=boardEl.children; for(let c of cells) while(c.firstChild)c.removeChild(c.firstChild); for(let i=0;i<grid.length;i++){const val=grid[i];if(val==null)continue; const tile=document.createElement('div');tile.className='tile '+(isPrime(val)?'prime':'normal');tile.textContent=val;if(String(val).length>4)tile.classList.add('small');cells[i].appendChild(tile);}}
+scoreEl.textContent=score;
+function randomInt(a,b){return Math.floor(Math.random()*(b-a+1))+a;}
+function spawnRandom(){const empties=grid.map((v,i)=>v==null?i:null).filter(x=>x!==null); if(!empties.length)return false; const pos=empties[Math.floor(Math.random()*empties.length)]; grid[pos]=randomInt(MIN_INIT,MAX_INIT); return true;}
+function saveState(){previousStates.push({grid:grid.slice(),score}); if(previousStates.length>10) previousStates.shift();}
+function canMerge(a,b){if(a==null||b==null)return false; const pa=isPrime(a),pb=isPrime(b); if(pa||pb)return pa&&pb&&a===b; return true;}
+function move(direction){ if(gameOver) return; saveState(); let moved=false; let mergedThisTurn=new Array(SIZE*SIZE).fill(false); const range=(dir)=>dir==='left'||dir==='up'?[...Array(SIZE).keys()]:[...Array(SIZE).keys()].reverse(); if(direction==='left'||direction==='right'){for(let r=0;r<SIZE;r++){const cols=range(direction);for(let c of cols){const i=idx(r,c); if(grid[i]==null)continue; let nc=c; while(true){const step=direction==='left'?-1:1; const nextC=nc+step;if(nextC<0||nextC>=SIZE)break; const nextI=idx(r,nextC); if(grid[nextI]==null){grid[nextI]=grid[idx(r,nc)]; grid[idx(r,nc)]=null; nc=nextC; moved=true; continue;} else{if(!mergedThisTurn[nextI]&&canMerge(grid[idx(r,nc)],grid[nextI])){grid[nextI]+=grid[idx(r,nc)]; score+=grid[nextI]; grid[idx(r,nc)]=null; mergedThisTurn[nextI]=true; moved=true;} break;}}}}} else{for(let c=0;c<SIZE;c++){const rows=range(direction);for(let r of rows){const i=idx(r,c); if(grid[i]==null)continue; let nr=r; while(true){const step=direction==='up'?-1:1; const nextR=nr+step;if(nextR<0||nextR>=SIZE)break; const nextI=idx(nextR,c); if(grid[nextI]==null){grid[nextI]=grid[idx(nr,c)]; grid[idx(nr,c)]=null; nr=nextR; moved=true; continue;} else{if(!mergedThisTurn[nextI]&&canMerge(grid[idx(nr,c)],grid[nextI])){grid[nextI]+=grid[idx(nr,c)]; score+=grid[nextI]; grid[idx(nr,c)]=null; mergedThisTurn[nextI]=true; moved=true;} break;}}}}} if(moved){spawnRandom(); draw(); if(checkGameOver()){ gameOver=true; setTimeout(()=>showPanel(),50);}} else previousStates.pop();}
+function checkGameOver(){if(grid.some(v=>v==null))return false; for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++){const v=grid[idx(r,c)];const nds=[[r-1,c],[r+1,c],[r,c-1],[r,c+1]];for(const [nr,nc] of nds){if(nr<0||nr>=SIZE||nc<0||nc>=SIZE)continue;if(canMerge(v,grid[idx(nr,nc)]))return false;}} return true;}
+function newGame(){grid=new Array(SIZE*SIZE).fill(null);score=0;previousStates=[];gameOver=false; for(let i=0;i<START_TILES;i++)spawnRandom(); draw(); overlay.classList.remove('active'); sidePanel.classList.remove('active');}
+function showPanel(){const sum=grid.reduce((a,v)=>a+(v||0),0); finalScoreEl.textContent=`Final Score: ${sum}`; overlay.classList.add('active'); sidePanel.classList.add('active');}
+function closePanel(){overlay.classList.remove('active'); sidePanel.classList.remove('active');}
+window.addEventListener('keydown',e=>{if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault(); const map={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'}; move(map[e.key]);}});
+hintBtn.addEventListener('click',()=>{alert('Rules:\n- 4×4 grid with tiles 5–9.\n- Use arrows or swipe to move.\n- Tiles add when they collide.\n- Prime tiles merge only with the same prime number.\n- Score increases by merged value.');});
+setupDOM(); newGame();
+</script>
+</body>
+</html>
